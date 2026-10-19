@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8">
+    <title>使用者 {{ user_id }} 的推薦結果</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Microsoft JhengHei', 'PingFang TC', sans-serif;
+            max-width: 800px; margin: 40px auto; padding: 0 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #e50914;
+            font-size: clamp(22px, 5vw, 32px);
+            margin-bottom: 8px;
+        }
+        a { color: #e50914; }
+        .nav { font-size: 14px; margin-bottom: 16px; }
+
+        .picker {
+            background: #f5f5f5;
+            border-left: 4px solid #e50914;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin: 14px 0 24px;
+        }
+        .picker form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .picker label { font-size: 14px; color: #555; }
+        .picker input[type="number"] {
+            padding: 8px 12px;
+            font-size: 15px;
+            width: 110px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .picker button {
+            padding: 8px 18px;
+            font-size: 14px;
+            background: #e50914; color: white;
+            border: none; border-radius: 5px;
+            cursor: pointer;
+        }
+        .picker button:hover { background: #b3070f; }
+        .picker .quick {
+            margin-left: auto;
+            font-size: 13px; color: #666;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+        .picker .quick > span { white-space: nowrap; }
+        .picker .quick a {
+            display: inline-block;
+            padding: 4px 10px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            text-decoration: none;
+            color: #555;
+        }
+        .picker .quick a:hover { border-color: #e50914; color: #e50914; }
+
+        .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table {
+            width: 100%; border-collapse: collapse;
+            min-width: 480px;
+        }
+        th, td {
+            padding: 10px; text-align: left;
+            border-bottom: 1px solid #ddd;
+            font-size: clamp(13px, 1.9vw, 14px);
+        }
+        th { background: #333; color: white; }
+        tr:hover { background: #f9f9f9; }
+        .score { color: #e50914; font-weight: bold; }
+        .empty {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 14px 18px;
+            border-radius: 6px;
+            color: #856404;
+        }
+
+        @media (max-width: 480px) {
+            body { margin: 20px auto; padding: 0 16px; }
+            .picker { padding: 12px 14px; }
+            .picker .quick { margin-left: 0; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <h1>使用者 {{ user_id }} 的 Top 20 推薦</h1>
+    <p class="nav"><a href="/">← 回首頁</a></p>
+
+    <div class="picker">
+        <form action="/recommend" method="get">
+            <label>查詢 User ID：</label>
+            <input type="number" name="user_id" min="1" max="610" value="{{ user_id }}" required>
+            <button type="submit">查詢</button>
+            <div class="quick">
+                <span>快速試試：</span>
+                <a href="/recommend?user_id=1">1</a>
+                <a href="/recommend?user_id=42">42</a>
+                <a href="/recommend?user_id=200">200</a>
+                <a href="/recommend?user_id=414">414</a>
+                <a href="/recommend?user_id=610">610</a>
+            </div>
+        </form>
+    </div>
+
+    {% if recs %}
+    <div class="table-wrap">
+    <table>
+        <tr><th>#</th><th>電影</th><th>預測分數</th></tr>
+        {% for r in recs %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ r.title if r.title else r.get('movieId', '?') }}</td>
+            <td class="score">{{ '%.2f'|format(r.score if r.score else r.get('rating', 0)) }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        找不到使用者 <strong>{{ user_id }}</strong> 的推薦結果。請輸入 1–610 之間的數字
+    </div>
+    {% endif %}
+</body>
+</html>

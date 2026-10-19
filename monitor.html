@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8">
+    <title>模型監控儀表板</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="60">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Microsoft JhengHei', 'PingFang TC', sans-serif;
+            max-width: 1000px; margin: 40px auto; padding: 0 20px;
+            background: #f8f9fa; line-height: 1.7;
+        }
+        h1 {
+            color: #333;
+            font-size: clamp(22px, 5vw, 32px);
+        }
+        h2 {
+            margin-top: 0;
+            font-size: clamp(17px, 3vw, 22px);
+        }
+        .card {
+            background: white; padding: 20px;
+            border-radius: 10px; margin: 15px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .card .hint {
+            color: #666;
+            font-size: clamp(12px, 1.7vw, 13px);
+            margin: 4px 0 14px;
+        }
+        .metric-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 5px 0;
+        }
+        .metric {
+            text-align: center;
+            padding: 15px 20px;
+            border-radius: 8px; color: white;
+            flex: 1 1 130px;
+            min-width: 120px;
+            min-height: 88px;
+        }
+        .metric .big  { font-size: clamp(20px, 3vw, 24px); line-height: 1.3; }
+        .metric .mid  { font-size: clamp(15px, 2.4vw, 18px); line-height: 1.3; }
+        .metric .lbl  { font-size: clamp(12px, 1.7vw, 13px); margin-top: 4px; }
+        .green  { background: #28a745; }
+        .yellow { background: #ffc107; color: #333; }
+        .red    { background: #dc3545; }
+        .gray   { background: #6c757d; }
+
+        .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table {
+            width: 100%; border-collapse: collapse; margin-top: 10px;
+            min-width: 480px;
+        }
+        th, td {
+            padding: 8px 12px; text-align: left;
+            border-bottom: 1px solid #eee;
+            font-size: clamp(13px, 1.8vw, 14px);
+        }
+        th { background: #333; color: white; }
+        .status-good { color: #28a745; font-weight: bold; }
+        .status-warn { color: #ffc107; font-weight: bold; }
+        .status-bad  { color: #dc3545; font-weight: bold; }
+        a { color: #e50914; }
+
+        .formula {
+            background: #1a1a2e; color: #c8d4e3;
+            padding: 12px 16px; border-radius: 6px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: clamp(11px, 1.7vw, 13px);
+            margin: 8px 0; line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre;
+        }
+        .formula .name { color: #ff6b6b; font-weight: bold; }
+        .formula .var  { color: #ffd166; }
+        details { margin-top: 12px; }
+        details summary {
+            cursor: pointer; color: #555;
+            font-size: clamp(13px, 1.9vw, 14px);
+            padding: 4px 0;
+        }
+        details summary:hover { color: #e50914; }
+        details[open] summary { color: #e50914; font-weight: bold; }
+        .detail-body {
+            background: #f8f9fa; padding: 12px 16px;
+            border-radius: 6px; margin-top: 8px;
+            font-size: clamp(13px, 1.9vw, 14px);
+        }
+        .sim-row {
+            margin-top: 18px; padding-top: 16px;
+            border-top: 1px dashed #ddd;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        .sim-btn {
+            padding: 10px 18px; font-size: 14px;
+            background: #e50914; color: white;
+            border: none; border-radius: 6px;
+            cursor: pointer;
+        }
+        .sim-btn:hover { background: #b3070f; }
+        .sim-btn:disabled { background: #999; cursor: not-allowed; }
+        #simStatus { color: #666; font-size: 14px; }
+
+        @media (max-width: 768px) {
+            body { margin: 20px auto; padding: 0 16px; }
+            .card { padding: 16px; }
+            .metric { padding: 12px 14px; }
+        }
+        @media (max-width: 480px) {
+            .metric {
+                flex: 1 1 calc(50% - 5px);
+                min-width: 0;
+                padding: 10px 8px;
+            }
+            .metric .big { font-size: 18px; }
+            .metric .mid { font-size: 14px; }
+            .metric .lbl { font-size: 11px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>模型監控儀表板</h1>
+    <p>每 60 秒自動刷新 | <a href="/">← 回首頁</a></p>
+
+    <div class="card">
+        <h2>模型效能（即時）</h2>
+        <p class="hint">
+            顯示 <strong>N/A</strong> 是因為 scorer 視窗是空的（Flask 重啟會清空）。按下方按鈕注入一批模擬評分，就能看到指標跑起來
+        </p>
+        <div class="metric-row">
+            <div class="metric {{ 'green' if metrics.mae and metrics.mae < 0.7 else ('yellow' if metrics.mae and metrics.mae < 1.0 else ('red' if metrics.mae else 'gray')) }}">
+                <div class="big">{{ '%.4f'|format(metrics.mae) if metrics.mae is not none else 'N/A' }}</div>
+                <div class="lbl">MAE</div>
+            </div>
+            <div class="metric {{ 'green' if metrics.rmse and metrics.rmse < 0.9 else ('yellow' if metrics.rmse and metrics.rmse < 1.2 else ('red' if metrics.rmse else 'gray')) }}">
+                <div class="big">{{ '%.4f'|format(metrics.rmse) if metrics.rmse is not none else 'N/A' }}</div>
+                <div class="lbl">RMSE</div>
+            </div>
+            <div class="metric {{ 'green' if metrics.status in ('OK','EXCELLENT') else ('yellow' if metrics.status == 'WARNING' else ('red' if metrics.status == 'ALERT_RETRAIN' else 'gray')) }}">
+                <div class="mid">{{ metrics.status }}</div>
+                <div class="lbl">狀態</div>
+            </div>
+            <div class="metric gray">
+                <div class="big">{{ metrics.total_scored }}</div>
+                <div class="lbl">累計評估筆數</div>
+            </div>
+        </div>
+
+        <div class="sim-row">
+            <button type="button" class="sim-btn" onclick="simulate(50)">🎲 產生 50 筆隨機評分</button>
+            <span id="simStatus"></span>
+        </div>
+        <p style="font-size:12px; color:#888; margin:8px 0 0;">
+            ※ 隨機抽的是<strong>訓練集裡的舊使用者 (1–610)</strong> × 隨機電影 × 隨機分數，這樣 NCF 才有 embedding 能算誤差，MAE / RMSE 才會跑起來。新使用者 (例如 999) 沒在訓練集裡，會被 scorer skip 掉，指標推不動
+        </p>
+
+        <details>
+            <summary>MAE / RMSE 怎麼算的？</summary>
+            <div class="detail-body">
+                <p><strong>原理</strong>：每一筆使用者評分進來時，把實際評分跟 NCF 模型的預測比一下，誤差累積到一個「滑動視窗」，視窗只看最近 500 筆。</p>
+                <div class="formula"><span class="name">MAE</span>  = (1/N) × Σ |<span class="var">y_actual</span> − <span class="var">y_predicted</span>|
+<span class="name">RMSE</span> = √[ (1/N) × Σ (<span class="var">y_actual</span> − <span class="var">y_predicted</span>)² ]
+
+  其中 N 是視窗大小（這裡 N = 500 筆最近的評分）</div>
+                <p><strong>怎麼解讀</strong>：</p>
+                <ul>
+                    <li><strong>MAE = 0.7</strong> 代表平均每次預測誤差 0.7 分（5 分制）</li>
+                    <li><strong>RMSE 比 MAE 大</strong> 是因為它對大誤差懲罰更重（平方）。差距越大，代表「偶爾預測爆炸」越嚴重</li>
+                    <li><strong>狀態判定</strong>：MAE &lt; 0.7 EXCELLENT，0.7~1.0 OK，1.0~1.3 WARNING，&gt; 1.3 ALERT_RETRAIN</li>
+                </ul>
+            </div>
+        </details>
+    </div>
+
+    <div class="card">
+        <h2>Data Drift（資料漂移）</h2>
+        <div class="metric-row">
+            <div class="metric {{ 'green' if metrics.psi < 0.1 else ('yellow' if metrics.psi < 0.2 else 'red') }}">
+                <div class="big">{{ '%.4f'|format(metrics.psi) }}</div>
+                <div class="lbl">PSI</div>
+            </div>
+            <div class="metric {{ 'green' if metrics.psi < 0.1 else ('yellow' if metrics.psi < 0.2 else 'red') }}">
+                <div class="mid">{{ metrics.drift_status }}</div>
+                <div class="lbl">漂移狀態</div>
+            </div>
+            <div class="metric gray">
+                <div class="big">{{ metrics.recent_count }}</div>
+                <div class="lbl">近期樣本數</div>
+            </div>
+        </div>
+        <p>PSI &lt; 0.1 = 穩定 | 0.1~0.2 = 注意 | &gt; 0.2 = 告警（建議重訓）</p>
+
+        <details>
+            <summary>PSI 怎麼算的？</summary>
+            <div class="detail-body">
+                <p><strong>原理</strong>：把訓練資料和最近進來的評分各自切成 5 個區間（1 分 / 2 分 / ... / 5 分），算每個區間的比例，然後看「最近的分布」跟「訓練的分布」差多少。</p>
+                <div class="formula"><span class="name">PSI</span> = Σ ( <span class="var">q_i</span> − <span class="var">b_i</span> ) × ln( <span class="var">q_i</span> / <span class="var">b_i</span> )
+
+  <span class="var">b_i</span> = 訓練資料中分數落在第 i 區間的比例
+  <span class="var">q_i</span> = 最近資料中分數落在第 i 區間的比例</div>
+                <p><strong>白話舉例</strong>：訓練時 5 分占 30%，最近 5 分卻只剩 10% → 用戶突然不愛給高分了 → PSI 會跳。</p>
+                <p><strong>判讀標準（業界通用）</strong>：</p>
+                <ul>
+                    <li>PSI &lt; 0.1 = 分布穩定，不用管</li>
+                    <li>PSI 0.1~0.2 = 有輕微偏移，繼續觀察</li>
+                    <li>PSI &gt; 0.2 = 顯著偏移，模型該用最新資料重訓了</li>
+                </ul>
+            </div>
+        </details>
+    </div>
+
+    <div class="card">
+        <h2>評分分布(基準 vs 近期)</h2>
+        <div class="table-wrap">
+        <table>
+            <tr><th>分數</th><th>基準分布<br><small style="font-weight:normal;color:#bbb;">(訓練資料)</small></th><th>近期分布<br><small style="font-weight:normal;color:#bbb;">(最近 N 筆評分)</small></th><th>偏移量</th></tr>
+            {% for r in [1.0, 2.0, 3.0, 4.0, 5.0] %}
+            <tr>
+                <td>{{ r }}</td>
+                <td>{{ '%.1f%%'|format(metrics.baseline_dist.get(r, 0) * 100) }}</td>
+                <td>{{ '%.1f%%'|format(metrics.recent_dist.get(r, 0) * 100) }}</td>
+                {% set diff = metrics.recent_dist.get(r, 0) - metrics.baseline_dist.get(r, 0) %}
+                <td class="{{ 'status-bad' if diff|abs > 0.05 else 'status-good' }}">
+                    {{ '%+.1f%%'|format(diff * 100) }}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        </div>
+        <p style="font-size:13px; color:#666; margin-top:12px;">
+            「基準」= 訓練 NCF 模型時所用的所有歷史評分的分布（固定的）。
+            「近期」= 系統上線後接到的最近 1000 筆評分的分布（會隨流量變動）。
+            兩邊比例差超過 5% 的列會用紅色標出 — 那一列就是 PSI 主要的貢獻者。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>結論</h2>
+        {% if metrics.need_retrain %}
+        <p class="status-bad" style="font-size:18px;">
+            ⚠ 建議重訓模型！<br>
+            執行：python3 ~/projects/recommend/train_ncf_pytorch.py
+        </p>
+        {% else %}
+        <p class="status-good" style="font-size:18px;">
+            ✓ 模型狀態健康，不需要動作。
+        </p>
+        {% endif %}
+        <p>觸發條件：MAE &gt; 1.0 或 PSI &gt; 0.2 任一達標就告警。</p>
+    </div>
+
+<script>
+async function simulate(n) {
+    const btns = document.querySelectorAll('.sim-btn');
+    btns.forEach(b => b.disabled = true);
+    const status = document.getElementById('simStatus');
+    status.textContent = '送出 ' + n + ' 筆評分中…';
+    try {
+        const r = await fetch('/simulate_ratings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'n=' + n
+        });
+        const data = await r.json();
+        status.textContent = '已送出 ' + data.sent + ' 筆，重新整理頁面…';
+        setTimeout(() => location.reload(), 800);
+    } catch (e) {
+        status.textContent = '送出失敗：' + e;
+        btns.forEach(b => b.disabled = false);
+    }
+}
+</script>
+</body>
+</html>

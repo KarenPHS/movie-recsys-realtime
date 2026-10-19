@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8">
+    <title>評分送出！</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Microsoft JhengHei', 'PingFang TC', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+        h1 { color: #28a745; }
+        .info { background: #d4edda; padding: 20px; border-radius: 10px; }
+        a { color: #e50914; }
+    </style>
+</head>
+<body>
+    <h1>評分已送出！</h1>
+    <div class="info">
+        <p>使用者 <strong>{{ user_id }}</strong> 對 <strong>{{ movie }}</strong> 評了 <strong>{{ rating }}</strong> 分。</p>
+        <p>這筆事件已經送進 Kafka topic「user-ratings」。</p>
+    </div>
+    <p><a href="/rate">再評一部</a> | <a href="/monitor">看模型監控</a> | <a href="/">回首頁</a></p>
+</body>
+</html>

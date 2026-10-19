@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Model checkpoints / data (大檔不入庫)
+*.pt
+*.pth
+*.csv
+*.parquet
+
+# 敏感 / 部署腳本（含帳密、內網 IP、ngrok，切勿上傳）
+deploy.py
+rcmd.py
+_restart_flask.py
+_run_flask.sh
+_build_resume*.py
+_build_star.py
+_append_appendix.py
+*secret*
+*credential*
+.env
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

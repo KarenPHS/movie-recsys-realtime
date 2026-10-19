@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8">
+    <title>評分一部電影</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Microsoft JhengHei', 'PingFang TC', sans-serif;
+            max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.7;
+        }
+        h1 {
+            color: #e50914;
+            font-size: clamp(22px, 5vw, 32px);
+        }
+        .intro {
+            background: #f5f5f5; border-left: 4px solid #e50914;
+            padding: 14px 18px; border-radius: 6px;
+            margin: 14px 0 24px;
+            font-size: clamp(13px, 2vw, 15px);
+        }
+        .intro a { color: #e50914; }
+        .card { background: #f5f5f5; padding: 20px; border-radius: 10px; }
+        select, input {
+            padding: 8px; font-size: 14px; margin: 5px 0;
+            max-width: 100%;
+        }
+        select { width: 100%; max-width: 320px; }
+        input[type=text] { width: 100%; max-width: 200px; }
+        button {
+            padding: 10px 20px; font-size: 16px;
+            background: #e50914; color: white;
+            border: none; border-radius: 5px; cursor: pointer;
+        }
+        a { color: #e50914; }
+        .note {
+            background: #fff3cd; border-left: 4px solid #ffc107;
+            padding: 14px 18px; border-radius: 6px;
+            margin-top: 24px;
+            font-size: clamp(13px, 1.9vw, 14px);
+        }
+        .note h3 {
+            margin: 0 0 10px; color: #856404;
+            font-size: clamp(14px, 2.2vw, 16px);
+        }
+        .note ol { margin: 6px 0; padding-left: 22px; }
+        .note ol li { margin: 6px 0; }
+        .note ul { margin: 4px 0 0; padding-left: 18px; list-style: '▸ '; }
+        .note ul li { margin: 3px 0; }
+
+        @media (max-width: 480px) {
+            body { margin: 20px auto; padding: 0 16px; }
+            .card, .intro, .note { padding: 12px 14px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>評分一部電影</h1>
+    <p><a href="/">← 回首頁</a></p>
+
+    <div class="intro">
+        送出的評分會被當成事件丟進 Kafka，由 Spark Streaming 即時處理。送完後切到「<a href="/monitor">模型監控儀表板</a>」，就看得到這筆評分如何影響 MAE / PSI
+    </div>
+
+    <div class="card">
+        <form action="/rate" method="post">
+            <p>
+                <label>你的 User ID： </label>
+                <input type="text" name="user_id" value="999">
+                <br>
+                <small style="color:#666; font-size:13px;">
+                    <strong>舊使用者 (1–610，MovieLens 訓練集裡的 ID)</strong>：NCF 有這個 user 的 embedding，評分會立刻被拿去跟模型預測比對，<strong>會更新</strong>監控儀表板的 MAE / RMSE<br>
+                    <strong>新使用者 (例如預設的 999，不在訓練集)</strong>：評分照常送進 Kafka 並寫進 HBase，但 NCF 沒有這個 user 的 embedding，<strong>不會</strong>產生預測誤差，所以這筆不會動到 MAE / RMSE，只會影響 PSI（評分分布漂移）；要等下次重訓把這個 user 收進訓練集後才會被算進模型指標
+                </small>
+            </p>
+            <p>
+                <label>選一部電影： </label>
+                <select name="movie_id">
+                    {% for mid, info in movies %}
+                    <option value="{{ mid }}">{{ info.title }}</option>
+                    {% endfor %}
+                </select>
+            </p>
+            <p>
+                <label>給幾分： </label>
+                <select name="rating">
+                    <option value="5.0">5 — 超愛</option>
+                    <option value="4.0">4 — 喜歡</option>
+                    <option value="3.0" selected>3 — 普通</option>
+                    <option value="2.0">2 — 不喜歡</option>
+                    <option value="1.0">1 — 討厭</option>
+                </select>
+            </p>
+            <button type="submit">送出評分</button>
+        </form>
+    </div>
+
+    <div class="note">
+        <h3>幕後資料流</h3>
+        <ol>
+            <li>Flask 把評分丟進 <code>Kafka topic: user-ratings</code></li>
+            <li>Spark Streaming 撈出來後，同時做三件事：
+                <ul>
+                    <li>更新「<a href="/monitor">模型監控儀表板</a>」（重算 MAE / RMSE / PSI）</li>
+                    <li>寫進 HBase user_ratings 表（給未來模型重訓）</li>
+                    <li>追加到 HDFS Parquet（讓 Trino 做 SQL 分析）</li>
+                </ul>
+            </li>
+        </ol>
+        送完後切到「<a href="/monitor">模型監控儀表板</a>」就能看到 MAE / PSI 數字隨評分動
+    </div>
+</body>
+</html>
