@@ -82,7 +82,7 @@
 <div class="container">
     <p class="nav"><a href="/">← 回首頁</a></p>
     <h1>架構與<span class="accent">設計思路</span></h1>
-    <p class="lead">系統分成<strong>「讀」</strong>和<strong>「寫」</strong>兩條獨立路徑：讀路徑要快 (毫秒級回傳推薦)，寫路徑要穩 (任何時候都不能掉評分、還要順手把每筆評分餵給監控)。兩條路徑中間放了一個 <strong>Kafka 訊息佇列</strong>當<strong>緩衝信箱</strong> ─ Flask 收到評分後只要丟進信箱就回應使用者，後面 Spark、HBase、監控各自從信箱拿走慢慢處理，<strong>誰塞車都不會拖到 Flask</strong>，模型重訓也不用停服務</p>
+    <p class="lead">系統分成<strong>「讀」</strong>和<strong>「寫」</strong>兩條路徑：讀路徑要快 (毫秒級回傳推薦)，寫路徑要穩 (任何時候都不能掉評分)。使用者評分後，Flask 只負責把事件寫入 <strong>Kafka 訊息佇列</strong>並即時回應，前後端各自獨立、互不阻塞；佇列把事件存於磁碟、依序排隊，具備<strong>削峰填谷</strong>的緩衝能力 ─ 尖峰暫存、離峰消化，不掉資料也不拖慢服務。評分進來後走兩條路：<strong>①</strong> 存進 Kafka 累積，當作模型<strong>批次重訓</strong>的資料；<strong>②</strong> 由服務內的 <strong>ModelScorer</strong> 當場算預測誤差，即時更新 /monitor 的 MAE/RMSE/PSI。</p>
 
     <h2>整體資料流</h2>
     <div class="ascii-box"><span class="green">[ 瀏覽器 ]</span>
@@ -100,30 +100,29 @@
    └── 評分：POST /rate ──┐
                           ▼
                    <span class="yellow">[ Flask ]</span>
-                          │
-                          ▼
-              <span class="red">[ Kafka topic: user-ratings ]</span>
-                          │
-                          ▼
-            <span class="blue">[ Spark Streaming on YARN ]</span>          ← 每 5 秒一個微批次
-                          │
-            ┌─────────────┼─────────────┬──────────────────┐
-            ▼             ▼             ▼                  ▼
-     <span class="red">[ HBase</span>          <span class="yellow">[ NCF</span>          <span class="red">[ HDFS</span>             <span class="green">[ /monitor</span>
-       <span class="red">user_ratings ]</span>    <span class="yellow">Scorer ]</span>      <span class="red">Parquet ]</span>             <span class="green">儀表板 ]</span>
-     <span class="gray">下次重訓的</span>      <span class="gray">即時算誤差</span>     <span class="gray">給 Trino 跑</span>          <span class="gray">即時更新</span>
-     <span class="gray">訓練資料</span>          <span class="gray">(MAE/RMSE)</span>     <span class="gray">SQL 分析</span>            <span class="gray">MAE/RMSE/PSI</span>
+            ┌─────────────┴──────────────┐
+            ▼                            ▼
+  <span class="red">[ Kafka: user-ratings ]</span>     <span class="yellow">[ ModelScorer (服務內) ]</span>
+    <span class="gray">存著，當批次重訓</span>         <span class="gray">同一筆評分當場算</span>
+    <span class="gray">的訓練資料</span>              <span class="gray">預測誤差 (MAE/RMSE)</span>
+                                         │  <span class="gray">+ PSI 追蹤分佈漂移</span>
+                                         ▼
+                                 <span class="green">[ /monitor 儀表板 ]</span>
+                                   <span class="gray">即時更新 MAE/RMSE/PSI</span>
 </div>
+    <p style="font-size:14px;color:#666;">
+        說明：ALS 離線批次把推薦預先算好寫進 HBase，查詢毫秒級、撐流量；評分事件丟進 Kafka 存著，作為下次<strong>批次重訓</strong>的資料；上線品質則由服務內的 ModelScorer 當場計算，不需另跑串流程式。
+    </p>
 
     <h2>模型比較結果</h2>
-    <p>同一份 train/test 切分（80/20，seed=42），跑在 MovieLens-small（約 10 萬筆評分）：</p>
+    <p>同一份 train/test 切分（80/20，seed=42），跑在 MovieLens-small（約 10 萬筆評分，排除冷啟動後公平比較）：</p>
     <div class="metric-grid">
         <div class="metric winner">
             <div class="num">0.8176</div>
             <div class="label">NCF — RMSE ★ 勝出</div>
         </div>
         <div class="metric">
-            <div class="num">0.8702</div>
+            <div class="num">0.8707</div>
             <div class="label">ALS — RMSE</div>
         </div>
         <div class="metric">
